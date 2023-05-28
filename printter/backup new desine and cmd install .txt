@@ -1,0 +1,158 @@
+import subprocess
+import tkinter as tk
+from tkinter import messagebox, Menu, ttk
+from typing import List
+from subprocess import CalledProcessError, STARTUPINFO, STARTF_USESHOWWINDOW
+from tkinter import ttk
+
+
+
+printer_server_name = "PRINT-SERVER"
+
+
+class PrinterInstaller(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("Printer Installer")
+        self.geometry("350x200")  # Increase the width of the window
+        self.resizable(False, False)
+        self.center_window()
+        self.create_menu()
+        self.configure(bg="#1E1E1E")
+
+        style = ttk.Style()
+        style.configure("Custom.TButton", font=("Arial", 12))
+
+        self.install_button = ttk.Button(self, text="Install Printer", command=self.install_selected_printer, width=25, style="Custom.TButton")
+        self.install_button.pack(pady=5)
+
+
+        
+        self.search_edit = ttk.Entry(self, font=("Arial", 12), width=25)
+        style = ttk.Style()
+        self.search_edit.configure(background="#EEEE18")
+        self.search_edit.configure(style="Custom.TEntry")
+        self.search_edit.pack(pady=10)
+
+
+        
+
+        
+        self.printer_listbox = tk.Listbox(self, font=("Arial", 14), width=20, selectmode=tk.SINGLE)
+        self.printer_listbox.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        self.printer_listbox.configure(bg="#FF5722")  # Set the background color of the listbox
+
+
+        self.search_edit.insert(0, "             Enter Printer Name")
+        self.search_edit.config(foreground="gray")
+        self.search_edit.bind('<FocusIn>', self.clear_placeholder)
+        self.search_edit.bind('<KeyRelease>', self.filter_printers)
+      
+
+        self.printer_list = self.list_printers()
+        self.update_printer_list()
+
+        self.center_window()
+
+    def center_window(self):
+        window_width = 250
+        window_height = 300
+        screen_width = self.winfo_screenwidth()
+        screen_height = self.winfo_screenheight()
+        x = (screen_width // 2) - (window_width // 2)
+        y = (screen_height // 2) - (window_height // 2)
+        self.geometry(f"{window_width}x{window_height}+{x}+{y}")
+
+    def show_about_dialog(self):
+        about_text = "Printer Installer v0.8\nDeveloped by Lemmouchi"
+        messagebox.showinfo("About", about_text)
+
+    def create_menu(self):
+        menu_bar = Menu(self)
+        self.config(menu=menu_bar)
+
+        file_menu = Menu(menu_bar, tearoff=0)
+        file_menu.add_command(label="Exit", command=self.quit)
+        menu_bar.add_cascade(label="File", menu=file_menu)
+
+        help_menu = Menu(menu_bar, tearoff=0)
+        help_menu.add_command(label="About", command=self.show_about_dialog)
+        menu_bar.add_cascade(label="Help", menu=help_menu)
+
+    def filter_printers(self, event):
+        search_text = self.search_edit.get().strip().lower()
+        filtered_printers = [printer for printer in self.printer_list if search_text in printer.lower()]
+        self.update_printer_list(filtered_printers)
+
+    def on_printer_select(self, event):
+        selected_index = self.printer_listbox.curselection()
+        if selected_index:
+            self.printer_listbox.selection_clear(0, tk.END)
+            self.printer_listbox.selection_set(selected_index)
+
+    def install_selected_printer(self):
+        selected_index = self.printer_listbox.curselection()
+        if selected_index:
+            printer_name = self.printer_listbox.get(selected_index)
+            success = self.install_printer(printer_name)
+            if success:
+                messagebox.showinfo("Printer Installed", f"{printer_name} has been installed successfully.")
+            else:
+                messagebox.showwarning("Installation Failed", f"{printer_name} installation failed.")
+
+    def update_printer_list(self, printers=None):
+        self.printer_listbox.delete(0, tk.END)
+        if printers is None:
+            printers = self.printer_list
+        for printer in printers:
+            self.printer_listbox.insert(tk.END, printer)
+
+    def clear_placeholder(self, event):
+        if self.search_edit.get() == "             Enter Printer Name":
+            self.search_edit.delete(0, 'end')
+            self.search_edit.config(foreground="black")
+
+    def list_printers(self) -> List[str]:
+        ps_command = 'Get-Printer -ComputerName "Print-Server" | Select-Object Name'
+
+        startupinfo = STARTUPINFO()
+        startupinfo.dwFlags |= STARTF_USESHOWWINDOW
+
+        try:
+            output = subprocess.check_output(['powershell', '-Command', ps_command], startupinfo=startupinfo,
+                                             text=True)
+            printers = [printer.strip() for printer in output.split('\n') if printer.strip()]
+            printers_to_hide = ['Microsoft XPS Document Writer', 'Microsoft Print to PDF', 'Name', '----']
+            printers = [printer for printer in printers if printer not in printers_to_hide]
+            return sorted(printers)
+        except CalledProcessError as e:
+            print(f"Error listing printers: {e}")
+            return []
+        except Exception as e:
+            print(f"Unexpected error occurred: {e}")
+            return []
+
+    def install_printer(self, printer_name: str) -> bool:
+        printer_path = f"\\\\print-server\\{printer_name}"
+        command = f"start {printer_path}"
+
+        startupinfo = STARTUPINFO()
+        startupinfo.dwFlags |= STARTF_USESHOWWINDOW
+
+        try:
+            subprocess.check_output(command, startupinfo=startupinfo, shell=True)
+            return True
+        except subprocess.CalledProcessError as e:
+            print(f"Error installing printer: {e}")
+            return False
+        except Exception as e:
+            print(f"Unexpected error occurred: {e}")
+            return False
+
+
+if __name__ == "__main__":
+    printer_installer = PrinterInstaller()
+    printer_installer.mainloop()
+
+    
+    #pyinstaller --onefile --noconsole --icon=print.ico print.py
